@@ -1,55 +1,46 @@
 # 🎬 Streaming Local — Jellyfin
 
 Proyecto final de **Administración de Redes** — Universidad Católica de Colombia  
-Despliegue automatizado de un servidor de streaming multimedia usando Jellyfin,  
-Ansible, Docker y AWS EC2.
+Despliegue automatizado de un servidor de streaming multimedia usando **Jellyfin**,  
+**Ansible**, **Docker** y **AWS EC2**.
 
 ---
 
 ## 📁 Estructura del repositorio
-
-```
 streaming-local/
 ├── ansible/
-│   ├── inventories/
-│   │   ├── aws/hosts.yml          # Inventario AWS (IP generada automáticamente)
-│   │   └── local/hosts.yml        # Inventario entorno local
+│   ├── ansible.cfg                        # Configuración de rutas de roles
 │   ├── group_vars/
-│   │   └── all.yml                # Variables globales (sin credenciales)
+│   │   └── all.yml                        # Variables globales (sin credenciales)
+│   ├── inventories/
+│   │   ├── aws/hosts.yml                  # Inventario AWS (IP auto-generada)
+│   │   └── local/hosts.yml                # Inventario entorno local
 │   ├── playbooks/
-│   │   ├── provision_aws.yml      # Crea EC2 + Security Group en AWS
-│   │   ├── deploy_aws.yml         # Despliega Jellyfin en EC2
-│   │   └── deploy_local.yml       # Despliega Jellyfin en servidor local
+│   │   ├── provision_aws.yml              # Crea EC2 + Security Group en AWS
+│   │   ├── deploy_aws.yml                 # Despliega Jellyfin en EC2
+│   │   └── deploy_local.yml               # Despliega Jellyfin local
 │   └── roles/
-│       ├── docker/                # Rol: instala Docker CE
-│       └── jellyfin/              # Rol: despliega Jellyfin con Docker Compose
+│       ├── docker/tasks/main.yml          # Rol: instala Docker CE
+│       └── jellyfin/
+│           ├── tasks/main.yml             # Rol: despliega Jellyfin
+│           ├── handlers/main.yml          # Handler: reinicia Jellyfin
+│           └── templates/
+│               └── docker-compose.yml.j2  # Template del compose
 ├── docker/
-│   └── docker-compose.yml         # Compose de referencia
-├── docs/
-│   └── informe-tecnico.md
-└── .gitignore
-```
+│   └── docker-compose.yml                 # Compose de referencia
+└── .gitignore                             # Excluye .pem, keys y credenciales
 
 ---
 
 ## ⚙️ Requisitos previos
 
-### En tu máquina de control (desde donde corres Ansible):
-
 ```bash
-# Python y pip
 sudo apt install python3 python3-pip -y
-
-# Ansible
-pip install ansible
-
-# Módulos AWS para Ansible
-pip install boto3 botocore
-ansible-galaxy collection install amazon.aws
-ansible-galaxy collection install community.docker
+pip install ansible boto3 botocore
+ansible-galaxy collection install amazon.aws community.docker
 ```
 
-### Credenciales AWS (variables de entorno — nunca en archivos):
+### Credenciales AWS:
 
 ```bash
 export AWS_ACCESS_KEY_ID="tu-access-key-id"
@@ -59,73 +50,61 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 ---
 
-## 🚀 Fase 1 — Despliegue en AWS
-
-### Paso 1: Crear el Key Pair en AWS
-En la consola de AWS → EC2 → Key Pairs → Crear key pair  
-- Nombre: `streaming-key`  
-- Tipo: RSA, formato `.pem`  
-- Guardar en `~/.ssh/streaming-key.pem`
+## 🚀 Fase 1 — AWS
 
 ```bash
-chmod 400 ~/.ssh/streaming-key.pem
+cd ansible/
+ansible-playbook playbooks/provision_aws.yml
+ansible-playbook playbooks/deploy_aws.yml -i inventories/aws/hosts.yml
 ```
 
-### Paso 2: Aprovisionar la infraestructura
-
-```bash
-ansible-playbook ansible/playbooks/provision_aws.yml
-```
-
-Esto crea automáticamente:
-- Security Group con puertos 22 (SSH) y 8096 (Jellyfin)
-- Instancia EC2 t2.micro Ubuntu 22.04
-- Actualiza el inventario con la IP pública
-
-### Paso 3: Desplegar Jellyfin en EC2
-
-```bash
-ansible-playbook ansible/playbooks/deploy_aws.yml \
-  -i ansible/inventories/aws/hosts.yml
-```
-
-### Paso 4: Acceder a Jellyfin
-
-Abrir en el navegador: `http://<IP-EC2>:8096`  
-Completar el wizard de configuración inicial de Jellyfin.
+Acceder: `http://<IP-EC2>:8096`
 
 ---
 
-## 🏠 Fase 2 — Despliegue en entorno local
+## 🏠 Fase 2 — Local
 
 ```bash
-# Editar la IP del servidor local
-nano ansible/inventories/local/hosts.yml
-
-# Desplegar
-ansible-playbook ansible/playbooks/deploy_local.yml \
-  -i ansible/inventories/local/hosts.yml
+ansible-playbook playbooks/deploy_local.yml \
+  -i inventories/local/hosts.yml --ask-become-pass
 ```
+
+Acceder: `http://localhost:8096` o `http://<IP-local>:8096`
+
+---
+
+## 📡 Puertos
+
+| Puerto | Protocolo | Función |
+|---|---|---|
+| 22 | TCP | SSH — administración remota |
+| 8096 | TCP | Jellyfin — Web UI y streaming |
+| 7359 | UDP | Descubrimiento automático en LAN |
+| 1900 | UDP | DLNA — compatibilidad Smart TV |
+
+---
+
+## 🛠️ Tecnologías
+
+| Tecnología | Uso |
+|---|---|
+| Ansible | Automatización del despliegue |
+| Docker CE 29.5.3 | Contenedorización de Jellyfin |
+| AWS EC2 t3.micro | Servidor cloud |
+| AWS Security Groups | Firewall de la instancia |
+| Jellyfin | Servidor de streaming multimedia |
+| Ubuntu 22.04 / 24.04 | Sistema operativo base |
 
 ---
 
 ## 🔒 Seguridad
 
-- Las credenciales AWS se pasan como variables de entorno, nunca en archivos.
-- Las llaves `.pem` están en `.gitignore`.
-- Los Security Groups solo abren los puertos estrictamente necesarios.
-- Se recomienda usar `ansible-vault` para variables sensibles en producción.
+- Credenciales AWS solo como variables de entorno, nunca en archivos.
+- Llaves `.pem` excluidas via `.gitignore`.
+- Security Group con mínimos puertos necesarios.
 
 ---
 
-## 🛠️ Tecnologías utilizadas
+## 🌐 Contexto comunitario
 
-| Tecnología | Uso |
-|---|---|
-| Ansible | Automatización del despliegue |
-| Docker / Docker Compose | Contenedorización de Jellyfin |
-| AWS EC2 | Servidor cloud |
-| AWS Security Groups | Firewall de la instancia |
-| Jellyfin | Servidor de streaming multimedia |
-| Ubuntu 22.04 | Sistema operativo base |
-| OpenWrt / Cisco | Red local comunitaria |
+Jellyfin opera 100% offline en LAN — ideal para comunidades con conectividad limitada. Sin suscripción, sin datos externos, compatible con redes mesh OpenWrt.
