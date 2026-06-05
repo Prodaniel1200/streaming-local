@@ -1,0 +1,46 @@
+---
+- name: Desplegar Jellyfin en entorno local
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars_files:
+    - ../group_vars/all.yml
+
+  pre_tasks:
+    - name: "🔍 Verificar conexión con el servidor local"
+      ansible.builtin.ping:
+
+    - name: Mostrar información del servidor
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ ansible_host }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Arquitectura: {{ ansible_architecture }}"
+
+    - name: Verificar si Docker ya está instalado
+      ansible.builtin.command: docker --version
+      register: docker_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Mostrar estado previo de Docker
+      ansible.builtin.debug:
+        msg: "{{ docker_check.stdout if docker_check.rc == 0 else 'Docker no instalado — se instalará ahora' }}"
+
+  roles:
+    - role: docker
+    - role: jellyfin
+
+  post_tasks:
+    - name: Obtener IP del servidor local
+      ansible.builtin.set_fact:
+        local_ip: "{{ ansible_default_ipv4.address }}"
+
+    - name: "✅ Despliegue local completado"
+      ansible.builtin.debug:
+        msg:
+          - "Jellyfin está corriendo en el servidor local"
+          - "Accede desde esta PC:        http://localhost:8096"
+          - "Accede desde la red local:   http://{{ local_ip }}:8096"
+          - "Directorio de medios:        {{ jellyfin_media_dir }}"

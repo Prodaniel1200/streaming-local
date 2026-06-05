@@ -1,0 +1,116 @@
+---
+# ============================================================
+#  Playbook: provision_aws.yml
+#  Crea la infraestructura AWS desde cero:
+#    - Security Group con reglas para Jellyfin
+#    - Instancia EC2 Ubuntu 22.04
+#    - Actualiza el inventario automáticamente
+# ============================================================
+#
+#  PRE-REQUISITOS (correr una sola vez en tu máquina):
+#    pip install boto3 botocore
+#    ansible-galaxy collection install amazon.aws
+#
+#  Variables de entorno necesarias (NO hardcodear aquí):
+#    export AWS_ACCESS_KEY_ID="tu-access-key"
+#    export AWS_SECRET_ACCESS_KEY="tu-secret-key"
+#    export AWS_DEFAULT_REGION="us-east-1"
+#
+#  Uso:
+#    ansible-playbook ansible/playbooks/provision_aws.yml
+# ============================================================
+
+- name: Aprovisionar infraestructura AWS para Jellyfin
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+
+    # ── 1. Security Group ──────────────────────────────────────
+    - name: Crear Security Group para Jellyfin
+      amazon.aws.ec2_security_group:
+        name: "{{ aws_security_group_name }}"
+        description: "Security Group para servidor de streaming Jellyfin"
+        region: "{{ aws_region }}"
+        rules: "{{ aws_sg_rules }}"
+        rules_egress:
+          - proto: all
+            cidr_ip: "0.0.0.0/0"
+            rule_desc: "Permitir todo el trafico saliente"
+        tags:
+          Name: "{{ aws_security_group_name }}"
+          Project: "streaming-local"
+          Environment: "produccion"
+      register: sg_result
+
+    - name: Mostrar ID del Security Group creado
+      ansible.builtin.debug:
+        msg: "Security Group ID: {{ sg_result.group_id }}"
+
+    # ── 2. Instancia EC2 ───────────────────────────────────────
+    - name: Lanzar instancia EC2 Ubuntu 22.04
+      amazon.aws.ec2_instance:
+        name: "{{ aws_instance_name }}"
+        region: "{{ aws_region }}"
+        instance_type: "{{ aws_instance_type }}"
+        image_id: "{{ aws_ami_id }}"
+        key_name: "{{ aws_key_name }}"
+        security_groups:
+          - "{{ aws_security_group_name }}"
+        network:
+          assign_public_ip: true
+        state: running
+        wait: true
+        wait_timeout: 300
+        tags:
+          Name: "{{ aws_instance_name }}"
+          Project: "streaming-local"
+          Environment: "produccion"
+        volumes:
+          - device_name: /dev/sda1
+            ebs:
+              volume_size: 20       # GB — suficiente para OS + Docker + medios de prueba
+              volume_type: gp3
+              delete_on_termination: true
+      register: ec2_result
+
+    - name: Obtener IP pública de la instancia
+      ansible.builtin.set_fact:
+        ec2_public_ip: "{{ ec2_result.instances[0].public_ip_address }}"
+
+    - name: Mostrar IP pública
+      ansible.builtin.debug:
+        msg: "Instancia creada — IP pública: {{ ec2_public_ip }}"
+
+    # ── 3. Actualizar inventario automáticamente ───────────────
+    - name: Escribir IP en el inventario de AWS
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/../inventories/aws/hosts.yml"
+        content: |
+          ---
+          all:
+            hosts:
+              jellyfin_aws:
+                ansible_host: {{ ec2_public_ip }}
+                ansible_user: ubuntu
+                ansible_ssh_private_key_file: ~/.ssh/{{ aws_key_name }}.pem
+                ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+        mode: "0644"
+
+    - name: Esperar a que SSH esté disponible en EC2
+      ansible.builtin.wait_for:
+        host: "{{ ec2_public_ip }}"
+        port: 22
+        delay: 15
+        timeout: 120
+        msg: "SSH no disponible aún, espera un momento..."
+
+    - name: "✅ Infraestructura lista"
+      ansible.builtin.debug:
+        msg:
+          - "EC2 corriendo en: {{ ec2_public_ip }}"
+          - "Ahora ejecuta: ansible-playbook ansible/playbooks/deploy_aws.yml"

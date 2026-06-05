@@ -1,0 +1,42 @@
+---
+# ============================================================
+#  Playbook: deploy_aws.yml
+#  Despliega Jellyfin sobre la instancia EC2 ya aprovisionada.
+#  Ejecutar DESPUÉS de provision_aws.yml.
+#
+#  Uso:
+#    ansible-playbook ansible/playbooks/deploy_aws.yml \
+#      -i ansible/inventories/aws/hosts.yml
+# ============================================================
+
+- name: Desplegar Jellyfin en AWS EC2
+  hosts: all
+  become: true          # sudo en el servidor remoto
+  gather_facts: true
+
+  vars_files:
+    - ../group_vars/all.yml
+
+  pre_tasks:
+    - name: "🔍 Verificar conexión SSH con el servidor"
+      ansible.builtin.ping:
+
+    - name: Mostrar información del servidor
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ ansible_host }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Arquitectura: {{ ansible_architecture }}"
+
+  roles:
+    - role: docker        # Paso 1: instalar Docker CE
+    - role: jellyfin      # Paso 2: desplegar Jellyfin
+
+  post_tasks:
+    - name: "✅ Despliegue completado"
+      ansible.builtin.debug:
+        msg:
+          - "Jellyfin está corriendo en AWS"
+          - "Accede desde el navegador: http://{{ ansible_host }}:8096"
+          - "Primera vez: completa el wizard de configuración inicial"
+          - "Sube medios a: {{ jellyfin_media_dir }}"

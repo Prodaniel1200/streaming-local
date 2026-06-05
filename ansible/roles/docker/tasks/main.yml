@@ -1,0 +1,77 @@
+---
+# ============================================================
+#  Rol: docker — Instala Docker CE en Ubuntu 22.04
+# ============================================================
+
+- name: Actualizar caché de paquetes apt
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Instalar dependencias previas
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+    state: present
+
+- name: Crear directorio para GPG keys
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Descargar y agregar GPG key oficial de Docker
+  ansible.builtin.shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: Establecer permisos correctos en GPG key
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/docker.gpg
+    mode: "0644"
+
+- name: Agregar repositorio oficial de Docker
+  ansible.builtin.shell: |
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+      https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" \
+      | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  args:
+    creates: /etc/apt/sources.list.d/docker.list
+
+- name: Actualizar caché apt con el nuevo repositorio
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Instalar Docker CE y plugins
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+
+- name: Iniciar y habilitar el servicio Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Agregar usuario ubuntu al grupo docker
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Verificar que Docker está funcionando
+  ansible.builtin.command: docker --version
+  register: docker_version_output
+  changed_when: false
+
+- name: Mostrar versión instalada de Docker
+  ansible.builtin.debug:
+    msg: "{{ docker_version_output.stdout }}"

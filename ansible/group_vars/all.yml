@@ -1,0 +1,46 @@
+---
+# ============================================================
+#  Variables globales del proyecto Streaming Local — Jellyfin
+# ============================================================
+
+# --- Jellyfin ---
+jellyfin_image: "jellyfin/jellyfin:latest"
+jellyfin_port: 8096
+jellyfin_config_dir: "/opt/jellyfin/config"
+jellyfin_cache_dir: "/opt/jellyfin/cache"
+jellyfin_media_dir: "/opt/jellyfin/media"
+
+# --- Docker ---
+docker_compose_version: "2.27.0"   # versión del plugin compose
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# --- AWS (valores sin secretos — las credenciales van en env vars) ---
+aws_region: "us-east-1"
+aws_instance_type: "t3.micro"          # Free Tier
+aws_ami_id: "ami-0c7217cdde317cfec"    # Ubuntu 22.04 LTS us-east-1
+aws_key_name: "streaming-key"          # Nombre del key pair en AWS (sin .pem)
+aws_security_group_name: "jellyfin-sg"
+aws_instance_name: "jellyfin-server"
+
+# Puertos abiertos en el Security Group
+aws_sg_rules:
+  - proto: tcp
+    ports: 22
+    cidr_ip: "0.0.0.0/0"
+    rule_desc: "SSH"
+  - proto: tcp
+    ports: 8096
+    cidr_ip: "0.0.0.0/0"
+    rule_desc: "Jellyfin HTTP"
+  - proto: udp
+    ports: 7359
+    cidr_ip: "0.0.0.0/0"
+    rule_desc: "Jellyfin LAN Discovery"
+
+# --- Usuario del sistema en EC2 ---
+ansible_user: daniel

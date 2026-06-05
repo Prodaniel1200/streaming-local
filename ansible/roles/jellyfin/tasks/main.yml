@@ -1,0 +1,61 @@
+---
+# ============================================================
+#  Rol: jellyfin — Despliega Jellyfin con Docker Compose
+# ============================================================
+
+- name: Crear directorios persistentes de Jellyfin
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - "{{ jellyfin_config_dir }}"
+    - "{{ jellyfin_cache_dir }}"
+    - "{{ jellyfin_media_dir }}"
+
+- name: Crear directorio del proyecto compose
+  ansible.builtin.file:
+    path: /opt/jellyfin/compose
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Copiar docker-compose.yml desde template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/jellyfin/compose/docker-compose.yml
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  notify: restart jellyfin
+
+- name: Pull de la imagen de Jellyfin
+  community.docker.docker_image:
+    name: "{{ jellyfin_image }}"
+    source: pull
+
+- name: Desplegar Jellyfin con Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: /opt/jellyfin/compose
+    state: present
+    pull: always
+
+- name: Esperar a que Jellyfin responda en el puerto {{ jellyfin_port }}
+  ansible.builtin.wait_for:
+    host: localhost
+    port: "{{ jellyfin_port }}"
+    delay: 10
+    timeout: 60
+    msg: "Jellyfin no respondió en el tiempo esperado"
+
+- name: Verificar que el contenedor está corriendo
+  ansible.builtin.command: docker ps --filter name=jellyfin --format "{{ '{{' }}.Status{{ '}}' }}"
+  register: jellyfin_status
+  changed_when: false
+
+- name: Mostrar estado del contenedor
+  ansible.builtin.debug:
+    msg: "Estado de Jellyfin: {{ jellyfin_status.stdout }}"

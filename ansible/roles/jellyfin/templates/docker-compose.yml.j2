@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  jellyfin:
+    image: {{ jellyfin_image }}
+    container_name: jellyfin
+    restart: unless-stopped
+    network_mode: host
+
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://{{ ansible_host }}:{{ jellyfin_port }}
+
+    volumes:
+      - {{ jellyfin_config_dir }}:/config
+      - {{ jellyfin_cache_dir }}:/cache
+      - {{ jellyfin_media_dir }}:/media
+
+    # Puertos (referencia — se abren via network_mode: host)
+    # {{ jellyfin_port }}  → HTTP Web UI
+    # 8920                 → HTTPS (opcional)
+    # 7359/udp             → Descubrimiento LAN
+    # 1900/udp             → DLNA

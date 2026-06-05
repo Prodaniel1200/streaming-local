@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+
+    # Red del host para que Jellyfin descubra dispositivos en la LAN
+    network_mode: host
+
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://{{ ansible_host }}:8096
+
+    volumes:
+      # Configuración persistente
+      - /opt/jellyfin/config:/config
+      # Caché (miniaturas, metadata)
+      - /opt/jellyfin/cache:/cache
+      # Biblioteca multimedia (películas, series, música)
+      - /opt/jellyfin/media:/media
+
+    # En modo host los puertos se exponen directamente,
+    # pero se documentan aquí como referencia
+    # 8096 → HTTP web UI
+    # 8920 → HTTPS (opcional)
+    # 7359 → Descubrimiento en LAN (UDP)
+    # 1900 → DLNA (UDP)
